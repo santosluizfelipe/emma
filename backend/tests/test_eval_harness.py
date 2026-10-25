@@ -106,3 +106,10 @@ def test_universal_invariants(env):
     assert checks.universal("ok [V1]", ["V1"], [], conn) == []
     assert checks.universal("ok [V99999]", ["V99999"], [], conn)
     assert checks.universal("ok", [], ["V5"], conn)
+
+
+def test_stability_summary_over_repeated_runs():
+    import run_eval
+    runs = [{"id": "worry", "passed": True, "cited": ["V1", "V2"]},
+            {"id": "worry", "passed": False, "cited": ["V1", "V3"]}]
+    assert run_eval.stability(runs) == [{"id": "worry", "runs": 2, "passed": 1, "cited_agreement": 0.33}]

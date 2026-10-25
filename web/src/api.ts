@@ -25,7 +25,35 @@ export interface ChatResponse {
   citations: Citation[];
   tool_calls: ToolCall[];
   removed_citations: string[];
+  unverified_quotes: string[];
   as_of: string;
+}
+
+export interface BriefingEvidence {
+  ref: string;
+  day: string;
+  category: string;
+  severity: "low" | "medium" | "high";
+  evidence: string;
+}
+
+export interface BriefingPerson {
+  service_user_id: number;
+  name: string;
+  alert: "none" | "trend" | "immediate";
+  score_now: number | null;
+  categories: string[];
+  evidence: BriefingEvidence[];
+}
+
+export interface Briefing {
+  as_of: string;
+  people: BriefingPerson[];
+  people_total: number;
+  alerting: { any_alert: number; immediate: number };
+  service_users_in_scope: number;
+  safeguarding: { total: number };
+  issues: Record<string, number>;
 }
 
 export interface Health {
@@ -92,6 +120,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<Health>("/api/health"),
+  briefing: () => request<Briefing>("/api/briefing"),
   chat: (message: string, history: Turn[]) =>
     request<ChatResponse>("/api/chat", { method: "POST", body: JSON.stringify({ message, history }) }),
   record: (ref: string) => request<RecordDetail>(`/api/records/${encodeURIComponent(ref)}`),

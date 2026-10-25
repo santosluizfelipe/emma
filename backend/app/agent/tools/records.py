@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from app.agent.tools.context import OPT_DATE, ToolContext, person_name, require_person
+from app.agent.tools.context import OPT_DATE, ToolContext, page_info, person_name, require_person
 
 
 def get_visit_notes(ctx: ToolContext, service_user_id: Optional[int] = None,
@@ -16,7 +16,8 @@ def get_visit_notes(ctx: ToolContext, service_user_id: Optional[int] = None,
         ids = [int(r.strip().upper().lstrip("V")) for r in visit_refs if r.strip().upper().lstrip("V").isdigit()][:20]
         if not ids:
             raise ValueError("visit_refs must look like ['V205']")
-        where, params = f"v.id IN ({','.join('?' * len(ids))})", ids
+        in_scope, scope_params = ctx.people_filter("v.service_user_id")
+        where, params = f"v.id IN ({','.join('?' * len(ids))}) AND {in_scope}", ids + scope_params
     elif service_user_id is not None:
         require_person(ctx, service_user_id)
         where = "v.service_user_id = ? AND v.start_time >= ? AND v.start_time < date(?, '+1 day')"
@@ -26,10 +27,10 @@ def get_visit_notes(ctx: ToolContext, service_user_id: Optional[int] = None,
     rows = ctx.conn.execute(
         f"""
         SELECT v.id, v.service_user_id, su.name AS service_user, c.name AS carer,
-               v.start_time, v.end_time, v.status, v.note
+               v.start_time, v.end_time, v.status, v.note, COUNT(*) OVER () AS n
         FROM visits v JOIN service_users su ON su.id = v.service_user_id
         LEFT JOIN carers c ON c.id = v.carer_id
-        WHERE {where} ORDER BY v.start_time DESC LIMIT ?
+        WHERE {where} ORDER BY v.start_time DESC, v.id DESC LIMIT ?
         """,
         params + [limit],
     ).fetchall()
@@ -44,20 +45,21 @@ def get_visit_notes(ctx: ToolContext, service_user_id: Optional[int] = None,
             "start": v["start_time"], "end": v["end_time"], "status": v["status"], "note": v["note"],
             "tasks": [dict(t) for t in tasks],
         })
-    return {"visits": visits, "returned": len(visits), "note": "newest first"}
+    return {"visits": visits, **page_info(rows[0]["n"] if rows else 0, len(visits)), "note": "newest first"}
 
 
 def get_care_plan(ctx: ToolContext, service_user_id: int, sections: Optional[List[str]] = None) -> dict:
     """Care plan and moving & handling assessment: baseline, conditions, known risks, controls."""
     name = require_person(ctx, service_user_id)
+    in_scope, scope_params = ctx.forms_filter("f.id")
     forms = ctx.conn.execute(
-        """
+        f"""
         SELECT f.id, f.form_name, f.instance_title, f.created_at
         FROM forms f JOIN form_subjects fs ON fs.form_id = f.id
-        WHERE fs.service_user_id = ? AND f.form_type IN ('Care Plans', 'Risk Assessments')
-        ORDER BY f.created_at DESC LIMIT 5
+        WHERE fs.service_user_id = ? AND f.form_type IN ('Care Plans', 'Risk Assessments') AND {in_scope}
+        ORDER BY f.created_at DESC, f.id DESC LIMIT 5
         """,
-        (service_user_id,),
+        (service_user_id, *scope_params),
     ).fetchall()
     wanted = [s.lower() for s in (sections or []) if s]
     out = []
@@ -76,18 +78,21 @@ def get_care_plan(ctx: ToolContext, service_user_id: int, sections: Optional[Lis
 
 def safeguarding_cases(ctx: ToolContext, service_user_id: Optional[int] = None) -> dict:
     """Safeguarding enquiries with their linked person, status and outstanding actions."""
-    sql = """
-        SELECT f.id, f.instance_title, f.created_at, fs.service_user_id, fs.method, fs.confidence
+    in_scope, params = ctx.forms_filter("f.id")
+    sql = f"""
+        SELECT f.id, f.instance_title, f.created_at, fs.service_user_id, fs.method, fs.confidence,
+               COUNT(*) OVER () AS n
         FROM forms f LEFT JOIN form_subjects fs ON fs.form_id = f.id
-        WHERE f.form_type = 'Safeguarding/Complaints'
+        WHERE f.form_type = 'Safeguarding/Complaints' AND {in_scope}
     """
-    params: list = []
     if service_user_id is not None:
+        require_person(ctx, service_user_id)
         sql += " AND fs.service_user_id = ?"
         params.append(service_user_id)
-    sql += " ORDER BY f.created_at DESC LIMIT 25"
+    sql += " ORDER BY f.created_at DESC, f.id DESC LIMIT 25"
+    rows = ctx.conn.execute(sql, params).fetchall()
     cases = []
-    for f in ctx.conn.execute(sql, params).fetchall():
+    for f in rows:
         answers = {a["question"]: a["answer"] for a in ctx.conn.execute(
             "SELECT question, answer FROM form_answers WHERE form_id = ?", (f["id"],))}
         cases.append({
@@ -103,7 +108,7 @@ def safeguarding_cases(ctx: ToolContext, service_user_id: Optional[int] = None) 
             "referrals": answers.get("Referrals made"),
             "current_status": answers.get("Current status"),
         })
-    return {"cases": cases, "count": len(cases)}
+    return {"cases": cases, **page_info(rows[0]["n"] if rows else 0, len(cases)), "note": "newest first"}
 
 
 SPECS = {

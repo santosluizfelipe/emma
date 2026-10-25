@@ -53,7 +53,7 @@ def test_gradual_declines_alert_before_their_first_high_severity_event(ro, truth
 
 def test_quiet_people_stay_quiet(ro, truth):
     for kind in ("routine", "negation_traps", "documentation_gaps"):
-        assert ro.execute("SELECT MAX(rolling_7d) FROM su_daily_risk WHERE service_user_id = ?",
+        assert ro.execute("SELECT COALESCE(MAX(rolling_7d), 0) FROM su_daily_risk WHERE service_user_id = ?",
                           (person(truth, kind),)).fetchone()[0] == 0
 
 

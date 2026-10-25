@@ -9,12 +9,13 @@ from __future__ import annotations
 import logging
 import sys
 
+from app import config
 from app.agent.loop import Agent
 
 
 def main() -> None:
     logging.basicConfig(level=logging.WARNING)
-    agent = Agent()
+    agent = Agent(org_unit_ids=config.AGENT_ORG_UNIT_IDS)
     history = []
     questions = [" ".join(sys.argv[1:])] if len(sys.argv) > 1 else None
     print(f"Care data agent (data as of {agent.ctx.as_of}). Ctrl+C to quit.\n")

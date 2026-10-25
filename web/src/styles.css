@@ -189,3 +189,21 @@ dd { margin: 2px 0 0; }
   .conversation, .composer { padding-left: 16px; padding-right: 16px; }
   .bubble.user { max-width: 90%; }
 }
+
+/* ---------------------------------------------------------------- needs attention */
+.briefing {
+  text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin: 0 0 24px;
+}
+.briefing h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.briefing > .muted { margin: 0 0 10px; }
+.attention-list { list-style: none; margin: 0; padding: 0; }
+.attention-list li { padding: 10px 0; border-top: 1px solid var(--border); }
+.attention-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attention-quote { margin: 6px 0 0; font-size: 0.9rem; }
+.badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; }
+.badge.immediate { background: var(--high-soft); color: var(--high); }
+.badge.trend { background: var(--medium-soft); color: var(--medium); }
+.badge.none { background: var(--low-soft); color: var(--low); }
+.link { margin-left: auto; background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; }
+.link:disabled { color: var(--muted); cursor: default; }

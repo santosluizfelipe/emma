@@ -23,6 +23,7 @@ Modules:
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime
 
 from app import config, db
 from app.ingest.normalise.forms import ingest_forms
@@ -55,7 +56,10 @@ def run(full: bool = False, source_path=None, index_path=None) -> dict:
         new_forms = ingest_forms(src, idx, batch_size)
 
         with idx:
-            latest = idx.execute("SELECT MAX(start_time) AS t FROM visits").fetchone()["t"]
+            # "Now" is the latest visit that has already started: rotas also hold future visits
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            latest = (idx.execute("SELECT MAX(start_time) AS t FROM visits WHERE start_time <= ?", (now,)).fetchone()["t"]
+                      or idx.execute("SELECT MAX(start_time) AS t FROM visits").fetchone()["t"])
             if latest:
                 db.set_meta(idx, "as_of", latest)
 

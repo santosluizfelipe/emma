@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.agent.tools.context import OPT_DATE, ToolContext
+from app.agent.tools.context import OPT_DATE, ToolContext, require_person
 from app.search import hybrid
 
 
@@ -13,14 +13,18 @@ def search_records(ctx: ToolContext, query: str, service_user_id: Optional[int] 
                    record_type: Optional[str] = None, k: int = 8) -> dict:
     """Find visit notes and form sections by wording or meaning (hybrid keyword + vector)."""
     k = max(1, min(k, 15))
+    if service_user_id is not None:
+        require_person(ctx, service_user_id)
+    info: dict = {}
     results = hybrid.search(ctx.conn, query, embedder=ctx.embedder, service_user_id=service_user_id,
                             date_from=date_from, date_to=date_to,
-                            record_type=record_type if record_type in ("visit", "form") else None, k=k)
+                            record_type=record_type if record_type in ("visit", "form") else None, k=k,
+                            org_unit_ids=ctx.org_unit_ids, info=info)
     for r in results:
         r["text"] = r["text"][:800]
     return {
         "query": query,
-        "retrievers": ["keyword"] + (["vector"] if ctx.embedder else []),
+        **info,
         "results": results,
         "warning": "Search finds wording, including negated mentions ('no concerns'). Read the text before concluding.",
     }

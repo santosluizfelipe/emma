@@ -86,7 +86,9 @@ export default function App() {
         <Header health={health} onReset={messages.length ? () => setMessages([]) : undefined} />
 
         <main className="conversation" aria-live="polite">
-          {messages.length === 0 && <EmptyState onPick={ask} disabled={loading} />}
+          {messages.length === 0 && (
+            <EmptyState onPick={ask} disabled={loading} onOpenRef={setOpenRef} activeRef={openRef} />
+          )}
 
           {messages.map((m) =>
             m.role === "user" ? (

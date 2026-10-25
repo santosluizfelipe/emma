@@ -122,8 +122,13 @@ def build_dataset(
     days: int = 14,
     seed: int = 7,
     org_unit_name: str = "Synthetic Care Team",
+    org_units: int = 1,
 ) -> Truth:
-    """Write the database at `path` (overwritten) and return its ground truth."""
+    """Write the database at `path` (overwritten) and return its ground truth.
+
+    With org_units > 1, people and carers are spread round-robin across that many teams;
+    each person's forms and carers belong to their team.
+    """
     rng = random.Random(seed)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,16 +137,18 @@ def build_dataset(
             p.unlink()
     conn = sqlite3.connect(path)
     conn.executescript(SOURCE_SCHEMA)
-    conn.execute("INSERT INTO org_units VALUES (1, ?)", (org_unit_name,))
+    conn.executemany("INSERT INTO org_units VALUES (?, ?)",
+                     [(u, org_unit_name if u == 1 else f"{org_unit_name} {u}") for u in range(1, org_units + 1)])
     conn.executemany("INSERT INTO form_types VALUES (?, ?)",
                      [(1, "Care Plans"), (2, "Risk Assessments"), (3, "Safeguarding/Complaints")])
     conn.executemany("INSERT INTO form_configs VALUES (?, ?, ?)",
                      [(1, "Care Plan", 1), (2, "Moving and Handling", 2), (3, "Safeguarding Enquiry Report", 3)])
 
-    n_carers = max(4, min(len(T.CARER_NAMES), len(scenarios) // 3 + 3))
+    n_carers = max(4, org_units, min(len(T.CARER_NAMES), len(scenarios) // 3 + 3))
     carers = list(range(1, n_carers + 1))
-    conn.executemany("INSERT INTO carers VALUES (?, ?, 'Active', 1)",
-                     [(i, T.CARER_NAMES[(i - 1) % len(T.CARER_NAMES)] + ("" if i <= len(T.CARER_NAMES) else f" {i}"))
+    conn.executemany("INSERT INTO carers VALUES (?, ?, 'Active', ?)",
+                     [(i, T.CARER_NAMES[(i - 1) % len(T.CARER_NAMES)] + ("" if i <= len(T.CARER_NAMES) else f" {i}"),
+                       (i - 1) % org_units + 1)
                       for i in carers])
 
     d0 = date.fromisoformat(start)
@@ -152,15 +159,18 @@ def build_dataset(
         pron, obj, pos = ("he", "him", "his") if sex == "M" else ("she", "her", "her")
         person = {"name": f"{first} {last}", "first": first,
                   "dob": f"19{rng.randint(30, 48)}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}"}
-        conn.execute("INSERT INTO service_users VALUES (?, ?, ?, ?, 'Active', 1)", (su_id, person["name"], person["dob"], sex))
+        unit = (su_id - 1) % org_units + 1
+        unit_carers = [c for c in carers if (c - 1) % org_units + 1 == unit]
+        conn.execute("INSERT INTO service_users VALUES (?, ?, ?, ?, 'Active', ?)",
+                     (su_id, person["name"], person["dob"], sex, unit))
         truth.people[su_id] = {"name": person["name"], "scenario": scenario.kind}
         fill = dict(first=first, pron=pron, obj=obj, pos=pos)
 
         for form_config, title, data in ((1, "Care Plan", _care_plan(person, scenario.focus)),
                                          (2, "Moving and Handling", _moving_and_handling(person))):
             form_id += 1
-            conn.execute("INSERT INTO forms VALUES (?, ?, 1, ?, 'service_user', ?, ?, ?)",
-                         (form_id, su_id, form_config, f"{title} — {person['name']}", json.dumps(data), start))
+            conn.execute("INSERT INTO forms VALUES (?, ?, ?, ?, 'service_user', ?, ?, ?)",
+                         (form_id, su_id, unit, form_config, f"{title} — {person['name']}", json.dumps(data), start))
 
         slots = ["morning", "lunch", "evening"] if scenario.lunch_visits else ["morning", "evening"]
         for day in range(days):
@@ -210,7 +220,7 @@ def build_dataset(
 
                 conn.execute(
                     "INSERT INTO visits VALUES (?, ?, ?, ?, ?, 'Completed', ?, ?)",
-                    (visit_id, su_id, rng.choice(carers), f"{day_str} {start_t}", f"{day_str} {end_t}",
+                    (visit_id, su_id, rng.choice(unit_carers), f"{day_str} {start_t}", f"{day_str} {end_t}",
                      json.dumps(tasks), " ".join(sentences)),
                 )
 
@@ -231,8 +241,8 @@ def build_dataset(
                     {"question": "Referrals made", "answer": "Referral to the local authority safeguarding team."},
                     {"question": "Current status", "answer": "Enquiry open."}]},
             ]
-            conn.execute("INSERT INTO forms VALUES (?, NULL, 1, 3, 'organisation', ?, ?, ?)",
-                         (form_id, f"Safeguarding Enquiry Report SG-SYN-{sg_number:03d}", json.dumps(data), day_str))
+            conn.execute("INSERT INTO forms VALUES (?, NULL, ?, 3, 'organisation', ?, ?, ?)",
+                         (form_id, unit, f"Safeguarding Enquiry Report SG-SYN-{sg_number:03d}", json.dumps(data), day_str))
             truth.safeguarding_links[form_id] = su_id
 
     truth.as_of = conn.execute("SELECT MAX(start_time) FROM visits").fetchone()[0]

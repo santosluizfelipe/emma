@@ -40,8 +40,8 @@ def load_candidates(idx: sqlite3.Connection, org_unit_id: int | None) -> list[Ca
 
 def resolve_subject(
     idx: sqlite3.Connection, form: sqlite3.Row, answers: list[tuple]
-) -> None:
-    """Decide which service user a form is about and record how we know."""
+) -> int | None:
+    """Decide which service user a form is about, record how we know, and return their id."""
     form_id = form["id"]
     written_name = find_subject_name(answers)
 
@@ -50,7 +50,7 @@ def resolve_subject(
             "INSERT OR REPLACE INTO form_subjects VALUES (?, ?, 1.0, 'direct', ?)",
             (form_id, form["service_user_id"], written_name),
         )
-        return
+        return form["service_user_id"]
 
     if not written_name:
         # e.g. an organisation-level form that is not about one person
@@ -58,7 +58,7 @@ def resolve_subject(
             "INSERT OR REPLACE INTO form_subjects VALUES (?, NULL, 0.0, 'not_applicable', NULL)",
             (form_id,),
         )
-        return
+        return None
 
     result = link_name(written_name, load_candidates(idx, form["org_unit_id"]))
     idx.execute(
@@ -68,6 +68,7 @@ def resolve_subject(
     if result.service_user_id is None or result.method == "fuzzy":
         flag(idx, "form", form_id, f"subject_{result.method}",
              f"'{written_name}': {result.detail}")
+    return result.service_user_id
 
 
 def ingest_forms(src: sqlite3.Connection, idx: sqlite3.Connection, batch_size: int) -> int:
@@ -122,7 +123,8 @@ def ingest_forms(src: sqlite3.Connection, idx: sqlite3.Connection, batch_size: i
                     "VALUES (?, ?, ?, ?, ?)",
                     [(f["id"], pos, *a) for pos, a in enumerate(answers)],
                 )
-                resolve_subject(idx, f, answers)
+                # a new care plan or assessment can settle an "assessment not reviewed" issue
+                db.enqueue(idx, "queue_rules_people", [resolve_subject(idx, f, answers)])
 
             last_id = batch[-1]["id"]
             db.set_meta(idx, "watermark:forms", str(last_id))

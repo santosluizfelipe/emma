@@ -49,6 +49,7 @@ def ingest_visits(src: sqlite3.Connection, idx: sqlite3.Connection, batch_size: 
                          clean(act.get("description")), clean(act.get("comment")),
                          1 if act.get("is_medication") else 0, clean(act.get("closed_date"))),
                     )
+            db.enqueue(idx, "queue_rules_visits", [v["id"] for v in batch])
             db.set_meta(idx, "watermark:visits", str(batch[-1]["id"]))
         count += len(batch)
         log.info("visits: %d processed (up to id %d)", count, batch[-1]["id"])

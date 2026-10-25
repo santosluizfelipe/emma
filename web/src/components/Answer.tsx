@@ -75,6 +75,13 @@ export function Answer({ response, activeRef, onOpenRef }: Props) {
         </p>
       )}
 
+      {response.unverified_quotes.length > 0 && (
+        <p className="notice">
+          Shown without quotation marks because the cited record doesn't contain these exact words:{" "}
+          {response.unverified_quotes.map((q) => `“${q}”`).join(", ")}.
+        </p>
+      )}
+
       <footer className="answer-footer">
         {response.citations.length > 0 && (
           <span className="muted">

@@ -46,7 +46,7 @@ def test_invented_quotes_are_flagged_and_not_scored(tmp_path):
     w = build_world(tmp_path, standard_scenarios()[:1], extractor=Hallucinating())
     conn = db.connect_index_readonly(w["index"])
     assert conn.execute("SELECT MAX(evidence_verified) FROM visit_signals").fetchone()[0] == 0
-    assert conn.execute("SELECT MAX(rolling_7d) FROM su_daily_risk").fetchone()[0] == 0
+    assert conn.execute("SELECT COALESCE(MAX(rolling_7d), 0) FROM su_daily_risk").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM record_issues WHERE issue = 'unverified_evidence'").fetchone()[0] > 0
 
 

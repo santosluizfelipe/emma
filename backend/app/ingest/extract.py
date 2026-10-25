@@ -6,7 +6,10 @@
 Scale properties:
   * Each visit is extracted once. extraction_runs remembers (visit, content hash,
     extractor), so re-runs only touch new or changed visits and a crash is safe to resume.
+  * Visits are paged in id order from a per-extractor watermark, so a run reads only
+    the visits after it (plus last run's failures), never the whole table per batch.
   * Visits are pulled in batches and extracted concurrently; the DB writer stays single.
+  * Changes are queued for the rules and roll-up steps, so they only redo what changed.
   * The LLM never sees names (replaced with [SU]) and only gets one visit + that
     person's care-plan risks, so each call is small and fixed-size.
   * Deterministic post-processing doesn't trust the model blindly: every evidence
@@ -75,23 +78,39 @@ def care_plan_context(idx: sqlite3.Connection, service_user_id: int) -> Tuple[st
     return answers.get("Health conditions and diagnoses", ""), answers.get("Known risks", "")
 
 
-def pending_visits(idx: sqlite3.Connection, extractor_name: str, limit: int) -> List[sqlite3.Row]:
-    """Visits never extracted, changed since, or extracted by a different extractor."""
+VISIT_COLUMNS = "v.id, v.service_user_id, v.start_time, v.note, v.content_hash, su.name AS full_name"
+
+
+def pending_visits(idx: sqlite3.Connection, extractor_name: str, after_id: int, limit: int) -> List[sqlite3.Row]:
+    """The next visits after `after_id`, in id order, never extracted, changed since, or
+    extracted by a different extractor. Each call starts where the last one stopped."""
     return idx.execute(
-        """
-        SELECT v.id, v.service_user_id, v.start_time, v.note, v.content_hash,
-               su.name AS full_name
+        f"""
+        SELECT {VISIT_COLUMNS}
         FROM visits v
         JOIN service_users su ON su.id = v.service_user_id
         LEFT JOIN extraction_runs r ON r.visit_id = v.id
-        WHERE r.visit_id IS NULL
-           OR r.content_hash <> v.content_hash
-           OR r.extractor <> ?
-           OR r.error IS NOT NULL
+        WHERE v.id > ?
+          AND (r.visit_id IS NULL OR r.content_hash <> v.content_hash OR r.extractor <> ?)
         ORDER BY v.id
         LIMIT ?
         """,
-        (extractor_name, limit),
+        (after_id, extractor_name, limit),
+    ).fetchall()
+
+
+def failed_visits(idx: sqlite3.Connection, extractor_name: str) -> List[sqlite3.Row]:
+    """Visits whose last extraction by this extractor failed. Retried once per run."""
+    return idx.execute(
+        f"""
+        SELECT {VISIT_COLUMNS}
+        FROM extraction_runs r
+        JOIN visits v ON v.id = r.visit_id
+        JOIN service_users su ON su.id = v.service_user_id
+        WHERE r.error IS NOT NULL AND r.extractor = ?
+        ORDER BY v.id
+        """,
+        (extractor_name,),
     ).fetchall()
 
 
@@ -159,7 +178,7 @@ def dedupe(signals: List[ExtractedSignal]) -> List[ExtractedSignal]:
 
 def save(idx: sqlite3.Connection, visit: VisitInput, row: sqlite3.Row, extractor: str,
          signals: Optional[List[ExtractedSignal]], error: Optional[str]) -> int:
-    idx.execute("DELETE FROM visit_signals WHERE visit_id = ?", (visit.visit_id,))
+    previous = idx.execute("DELETE FROM visit_signals WHERE visit_id = ?", (visit.visit_id,)).rowcount
     count = 0
     for s in dedupe(signals or []):
         verified = evidence_is_verbatim(s.evidence, visit)
@@ -181,6 +200,10 @@ def save(idx: sqlite3.Connection, visit: VisitInput, row: sqlite3.Row, extractor
         "VALUES (?, ?, ?, ?, ?)",
         (visit.visit_id, row["content_hash"], extractor, count, error),
     )
+    db.enqueue(idx, "queue_rules_visits", [visit.visit_id])
+    if previous or count:  # the person's risk picture may have changed
+        db.enqueue(idx, "queue_rules_people", [visit.service_user_id])
+        db.enqueue(idx, "queue_rollup_people", [visit.service_user_id])
     return count
 
 
@@ -190,7 +213,8 @@ def run(extractor: Optional[Extractor] = None, index_path=None, max_visits: Opti
     extractor = extractor or make_extractor("auto")
     idx = db.connect_index(index_path)
     processed = signals_total = failures = 0
-    plans: Dict[int, Tuple[str, str]] = {}
+    # Every visit up to this id has been read by this extractor (failures are retried separately)
+    done_key = f"extracted_through:{extractor.name}"
 
     def work(visit: VisitInput):
         try:
@@ -199,21 +223,36 @@ def run(extractor: Optional[Extractor] = None, index_path=None, max_visits: Opti
             log.warning("visit %s failed: %s", visit.visit_id, exc)
             return None, f"{type(exc).__name__}: {exc}"[:500]
 
+    def batches():
+        """(rows, advances_watermark): last run's failures first, then visits after the watermark."""
+        retry = failed_visits(idx, extractor.name)
+        for i in range(0, len(retry), BATCH_SIZE):
+            yield retry[i:i + BATCH_SIZE], False
+        after = int(db.get_meta(idx, done_key, "0"))
+        while True:
+            rows = pending_visits(idx, extractor.name, after, BATCH_SIZE)
+            if not rows:
+                return
+            after = rows[-1]["id"]
+            yield rows, True
+
     try:
         workers = 1 if isinstance(extractor, KeywordExtractor) else config.EXTRACTION_CONCURRENCY
-        attempted: set = set()
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            while max_visits is None or processed < max_visits:
-                rows = [r for r in pending_visits(idx, extractor.name, BATCH_SIZE) if r["id"] not in attempted]
-                if not rows:
-                    break
-                attempted.update(r["id"] for r in rows)
+            for rows, advances_watermark in batches():
+                if max_visits is not None:
+                    if processed >= max_visits:
+                        break
+                    rows = rows[: max_visits - processed]
+                plans: Dict[int, Tuple[str, str]] = {}  # care-plan context, cached per batch
                 inputs = [build_input(idx, r, plans) for r in rows]
                 results = list(pool.map(work, inputs))
                 with idx:
                     for row, visit, (signals, error) in zip(rows, inputs, results):
                         signals_total += save(idx, visit, row, extractor.name, signals, error)
                         failures += error is not None
+                    if advances_watermark:
+                        db.set_meta(idx, done_key, str(rows[-1]["id"]))
                 processed += len(rows)
                 log.info("extracted %d visits (%d signals so far)", processed, signals_total)
 

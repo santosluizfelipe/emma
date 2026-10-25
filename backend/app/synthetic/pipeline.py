@@ -15,7 +15,7 @@ from app.synthetic.scenarios import Scenario
 
 
 def build_world(folder, scenarios: List[Scenario], extractor=None, embedder: Optional[Embedder] = None,
-                days: int = 14, seed: int = 7) -> dict:
+                days: int = 14, seed: int = 7, org_units: int = 1) -> dict:
     """Write source.db (+ truth) and index.db into `folder` and run the full write path.
 
     extractor defaults to the oracle (ground truth); pass a real extractor to test it.
@@ -25,7 +25,7 @@ def build_world(folder, scenarios: List[Scenario], extractor=None, embedder: Opt
     source, index_db = folder / "source.db", folder / "index.db"
     for p in folder.glob("index.db*"):
         p.unlink()
-    truth: Truth = build_dataset(source, scenarios, days=days, seed=seed)
+    truth: Truth = build_dataset(source, scenarios, days=days, seed=seed, org_units=org_units)
     normalise.run(full=True, source_path=source, index_path=index_db)
     extract.run(extractor or OracleExtractor(truth), index_path=index_db)
     conn = db.connect_index(index_db)

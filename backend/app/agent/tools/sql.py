@@ -20,8 +20,8 @@ Note: visit/activity status is always 'Completed' in this data and visit times a
 
 
 def query_sql(ctx: ToolContext, sql: str) -> dict:
-    """Read-only SQL over curated tables for counts, rotas and dates."""
-    return sql_guard.execute(ctx.conn, sql)
+    """Read-only SQL over curated tables for counts, rotas and dates, limited to the user's org units."""
+    return sql_guard.execute(ctx.conn, sql, org_unit_ids=ctx.org_unit_ids)
 
 
 SPECS = {

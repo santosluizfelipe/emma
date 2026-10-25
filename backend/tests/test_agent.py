@@ -113,3 +113,28 @@ def test_grouped_citations_are_split_and_checked(world, truth):
                               f"Declining [{a}, {b}]."])
     result = agent.ask("How are they?")
     assert f"[{a}] [{b}]" in result.answer
+
+
+def test_quotes_must_appear_in_the_cited_record(world, truth):
+    s = next(s for s in truth.signals if s.source == "note")
+    agent, _ = _agent(world, [[("signal_timeline", {"service_user_id": s.service_user_id})],
+                              f'- Recorded: "{s.evidence}" [V{s.visit_id}]\n- Also: "fell down the stairs twice" [V{s.visit_id}]'])
+    result = agent.ask("How are they?")
+    assert result.unverified_quotes == ["fell down the stairs twice"]
+    assert f'"{s.evidence}"' in result.answer and '"fell down the stairs twice"' not in result.answer
+
+
+def test_each_question_reads_the_latest_data(world):
+    agent, _ = _agent(world, ["Nothing to report."])
+    assert agent.ask("Anything?").as_of == agent.ctx.as_of
+
+
+def test_a_loose_quote_is_unquoted_only_where_it_is_wrong(world, truth):
+    s = next(s for s in truth.signals if s.source == "note")
+    other = next(v for v in truth.signals if v.visit_id != s.visit_id and v.source == "note")
+    agent, _ = _agent(world, [[("signal_timeline", {"service_user_id": s.service_user_id}),
+                               ("signal_timeline", {"service_user_id": other.service_user_id})],
+                              f'- "{s.evidence}" [V{s.visit_id}]\n- "{s.evidence}" [V{other.visit_id}]'])
+    lines = agent.ask("Any news?").answer.splitlines()
+    assert lines[0] == f'- "{s.evidence}" [V{s.visit_id}]'      # verbatim: keeps its quotes
+    assert lines[1] == f"- {s.evidence} [V{other.visit_id}]"      # not in that record: quotes dropped

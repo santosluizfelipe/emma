@@ -69,18 +69,55 @@ def build_synthetic(people: int, seed: int):
     return build_world(folder, demo_population(people, seed), embedder=default_embedder())["index"]
 
 
-def run_agent(dataset: str, people: int, seed: int, only: Optional[List[str]], log=print) -> dict:
+# USD per 1M tokens (input, output), only for the report's cost estimate: check current prices
+PRICES = {"gpt-5": (1.25, 10.0), "gpt-5-mini": (0.25, 2.0)}
+
+
+def usage(results: List[dict], model: str) -> dict:
+    tokens_in = sum(r.get("tokens", {}).get("input", 0) for r in results)
+    tokens_out = sum(r.get("tokens", {}).get("output", 0) for r in results)
+    price = PRICES.get(model)
+    cost = round((tokens_in * price[0] + tokens_out * price[1]) / 1e6, 3) if price else None
+    return {"model": model, "input_tokens": tokens_in, "output_tokens": tokens_out, "estimated_usd": cost}
+
+
+def stability(results: List[dict]) -> List[dict]:
+    """Per question over repeated runs: how often it passed, and how much the cited records
+    agree (records cited in every run / records cited in any run)."""
+    by_id: dict = {}
+    for r in results:
+        by_id.setdefault(r["id"], []).append(r)
+    out = []
+    for case_id, runs in by_id.items():
+        cited = [set(r["cited"]) for r in runs]
+        union = set().union(*cited)
+        out.append({"id": case_id, "runs": len(runs), "passed": sum(r["passed"] for r in runs),
+                    "cited_agreement": round(len(set.intersection(*cited)) / len(union), 2) if union else 1.0})
+    return out
+
+
+def run_agent(dataset: str, people: int, seed: int, only: Optional[List[str]], log=print, repeat: int = 1) -> dict:
     from app.agent.loop import Agent
 
     if not config.OPENAI_API_KEY:
         log("  skipped: OPENAI_API_KEY not set")
         return {"dataset": dataset, "skipped": True, "results": []}
     index = build_synthetic(people, seed) if dataset == "synthetic" else None
-    agent = Agent(index_path=index)
+    # the loaded data is asked with the API's scope; a synthetic world is one team, asked unscoped
+    agent = Agent(index_path=index, org_unit_ids=config.AGENT_ORG_UNIT_IDS if dataset == "current" else None)
     log(f"  dataset: {dataset}{f' ({people} people)' if dataset == 'synthetic' else ''}, "
         f"as of {agent.ctx.as_of}, model {agent.model}")
-    results = agent_eval.run(agent, agent_eval.load_cases(), only, log)
-    return {"dataset": dataset, "skipped": False, "results": results}
+    results = []
+    for i in range(repeat):
+        if repeat > 1:
+            log(f"  run {i + 1} of {repeat}")
+        results += agent_eval.run(agent, agent_eval.load_cases(), only, log)
+    report = {"dataset": dataset, "skipped": False, "results": results, "usage": usage(results, agent.model)}
+    log(f"  tokens: {report['usage']['input_tokens']:,} in, {report['usage']['output_tokens']:,} out; "
+        f"estimated ${report['usage']['estimated_usd']}")
+    if repeat > 1:
+        report["stability"] = stability(results)
+    return report
 
 
 # --------------------------------------------------------------------------- report
@@ -114,6 +151,14 @@ def write_report(report: dict, name: str) -> None:
         for r in run["results"]:
             lines.append(f"| {r['question']} | {'pass' if r['passed'] else 'FAIL'} | {', '.join(r['tools'])} | "
                          f"{r['seconds']} | {'; '.join(r['failures'])} |")
+        if run.get("usage"):
+            u = run["usage"]
+            lines += ["", f"Tokens: {u['input_tokens']:,} in, {u['output_tokens']:,} out ({u['model']}); "
+                          f"estimated cost ${u['estimated_usd']} at list prices"]
+        if run.get("stability"):
+            lines += ["", "Stability over repeated runs", "", "| Question | Passed | Cited records agreeing |",
+                      "|---|---|---|"]
+            lines += [f"| {s['id']} | {s['passed']}/{s['runs']} | {s['cited_agreement']:.0%} |" for s in run["stability"]]
     for filename in ("latest.md", f"{name}.md"):
         (out / filename).write_text("\n".join(lines) + "\n")
     print(f"\nReport: {out / (name + '.md')} (also latest.md)")
@@ -129,6 +174,8 @@ def main() -> int:
     p_agent.add_argument("--people", type=int, default=60)
     p_agent.add_argument("--seed", type=int, default=7)
     p_agent.add_argument("--only", nargs="*", help="case ids, e.g. worry falls")
+    p_agent.add_argument("--repeat", type=int, default=1,
+                         help="ask every question N times and report pass rate and citation agreement")
     sub.add_parser("all")
     args = parser.parse_args()
 
@@ -138,7 +185,7 @@ def main() -> int:
         report["extraction"] = run_extraction(getattr(args, "extractor", "both"))
     if args.command == "agent":
         print("\nAgent")
-        report["agent"].append(run_agent(args.dataset, args.people, args.seed, args.only))
+        report["agent"].append(run_agent(args.dataset, args.people, args.seed, args.only, repeat=args.repeat))
     if args.command == "all":
         for dataset in ("current", "synthetic"):
             print(f"\nAgent ({dataset})")

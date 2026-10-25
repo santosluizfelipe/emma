@@ -96,6 +96,39 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+# --------------------------------------------------------------------------- change queues
+# Tables of ids that changed since a later step last ran (see schema.sql)
+QUEUE_KEYS = {"queue_rules_visits": "visit_id", "queue_rules_people": "service_user_id",
+              "queue_rollup_people": "service_user_id"}
+QUEUE_CHUNK = 500
+
+
+def marks(values) -> str:
+    """'?,?,?' for an IN list."""
+    return ",".join("?" * len(values))
+
+
+def enqueue(conn: sqlite3.Connection, queue: str, ids) -> None:
+    """Mark records as changed for a later step. Idempotent."""
+    conn.executemany(f"INSERT OR IGNORE INTO {queue} VALUES (?)", [(i,) for i in ids if i is not None])
+
+
+def drain(conn: sqlite3.Connection, queue: str, handle) -> int:
+    """Pass queued ids to handle(ids) in chunks; each chunk is removed in the same transaction."""
+    key, done, last = QUEUE_KEYS[queue], 0, None
+    while True:
+        ids = [r[0] for r in conn.execute(
+            f"SELECT {key} FROM {queue} WHERE ? IS NULL OR {key} > ? ORDER BY {key} LIMIT ?",
+            (last, last, QUEUE_CHUNK))]
+        if not ids:
+            return done
+        with conn:
+            handle(ids)
+            conn.execute(f"DELETE FROM {queue} WHERE {key} IN ({marks(ids)})", ids)
+        done += len(ids)
+        last = ids[-1]
+
+
 def day_of(timestamp: str) -> str:
     """'2025-11-15 08:00:00' -> '2025-11-15'"""
     return timestamp[:10]

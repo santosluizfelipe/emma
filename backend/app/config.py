@@ -61,7 +61,13 @@ ROLLING_DAYS = 7
 RECOMPUTE_WINDOW_DAYS = int(os.getenv("RECOMPUTE_WINDOW_DAYS", "30"))
 
 # --------------------------------------------------------------------------- agent
+# Org units (teams) the API's agent may see, comma-separated ids. Empty = all data
+# (single tenant, local use). In production this comes from the logged-in user's role.
+AGENT_ORG_UNIT_IDS = tuple(int(x) for x in os.getenv("AGENT_ORG_UNIT_IDS", "").split(",") if x.strip()) or None
 AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "8"))       # tool rounds per question
+# Reasoning effort for the agent model (minimal | low | medium | high; empty = model default).
+# "low" is faster; the eval checks that answers stay correct.
+AGENT_REASONING_EFFORT = os.getenv("AGENT_REASONING_EFFORT", "low")
 TOOL_RESULT_MAX_CHARS = int(os.getenv("TOOL_RESULT_MAX_CHARS", "12000"))
 SQL_MAX_ROWS = 200
 SQL_TIMEOUT_SECONDS = 5

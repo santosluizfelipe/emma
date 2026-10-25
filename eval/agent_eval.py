@@ -47,9 +47,10 @@ def run(agent, cases: List[dict], only: Optional[List[str]] = None, log=print) -
             tools = [t["tool"] for t in r.tool_calls]
             cited = checks.CITE.findall(r.answer)
             failures = checks.universal(r.answer, cited, r.removed_citations, conn)
+            failures += [f"quoted words not in the cited record (shown unquoted): {q}" for q in r.unverified_quotes]
             failures += checks.CHECKS[case["check"]](r.answer, cited, tools, conn, as_of, case)
             row = {"id": case["id"], "question": case["question"], "passed": not failures, "failures": failures,
-                   "tools": tools, "cited": sorted(set(cited)), "answer": r.answer}
+                   "tools": tools, "cited": sorted(set(cited)), "answer": r.answer, "tokens": r.tokens}
         except Exception as exc:
             row = {"id": case["id"], "question": case["question"], "passed": False,
                    "failures": [f"error: {type(exc).__name__}: {exc}"], "tools": [], "cited": [], "answer": ""}

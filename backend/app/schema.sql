@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS service_users (
     status        TEXT,
     org_unit_id   INTEGER
 );
+CREATE INDEX IF NOT EXISTS idx_service_users_org ON service_users (org_unit_id);  -- scope filters
 
 CREATE TABLE IF NOT EXISTS carers (
     id          INTEGER PRIMARY KEY,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS forms (
     org_unit_id     INTEGER,
     created_at      TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_forms_org ON forms (org_unit_id);  -- scope filters
 
 -- One row per question/answer (from forms.form_data JSON)
 CREATE TABLE IF NOT EXISTS form_answers (
@@ -131,7 +133,7 @@ CREATE TABLE IF NOT EXISTS extraction_runs (
 
 -- =========================================================== Step 3: rules + roll-ups
 CREATE TABLE IF NOT EXISTS record_issues (
-    record_type     TEXT NOT NULL,     -- visit | service_user | signal
+    record_type     TEXT NOT NULL,     -- visit | service_user
     record_id       INTEGER NOT NULL,
     service_user_id INTEGER,
     day             TEXT,
@@ -184,3 +186,15 @@ CREATE TABLE IF NOT EXISTS chunk_embeddings (
     vector          BLOB NOT NULL          -- float32, L2-normalised
 );
 CREATE INDEX IF NOT EXISTS idx_embeddings_su_day ON chunk_embeddings (service_user_id, day);
+
+-- =========================================================== change queues
+-- What changed since the steps after extraction last ran, so each run only touches
+-- those records instead of re-reading everything. Producers: normalise and extract.
+CREATE TABLE IF NOT EXISTS queue_rules_visits  (visit_id INTEGER PRIMARY KEY);         -- visit-level rules
+CREATE TABLE IF NOT EXISTS queue_rules_people  (service_user_id INTEGER PRIMARY KEY);  -- person-level rules
+CREATE TABLE IF NOT EXISTS queue_rollup_people (service_user_id INTEGER PRIMARY KEY);  -- risk roll-ups
+
+-- Indexes for incremental work and scoped reads
+CREATE INDEX IF NOT EXISTS idx_runs_failed ON extraction_runs (extractor) WHERE error IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chunks_unembedded ON chunks (id) WHERE embedded_hash IS NULL;
+CREATE INDEX IF NOT EXISTS idx_forms_type ON forms (form_type, created_at);
