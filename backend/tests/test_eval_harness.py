@@ -97,6 +97,7 @@ def test_carer_counts_and_unknown_person_checks(env):
     table = "\n".join(f"- {name}: {n}" for name, n in rows)
     assert checks.carer_counts(table, [], ["query_sql"], conn, as_of, {}) == []
     assert checks.unknown_person("I couldn't find anyone with that name.", [], [], conn, as_of, {}) == []
+    assert checks.unknown_person("I can\u2019t find any records for that name.", [], [], conn, as_of, {}) == []
     assert checks.unknown_person("They are fine [V1].", ["V1"], [], conn, as_of, {})
 
 
