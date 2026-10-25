@@ -3,7 +3,134 @@
 An agent that lets care managers ask questions about home-care visits and clinical
 forms, and surfaces how service users are doing and where the risks are.
 
-> Status: complete. Back end (steps 1-5), front end (step 6) and evaluation (step 7).
+> Status: complete and evaluated. On 38 extraction cases the LLM extractor (gpt-5-mini)
+> scores 38/38 against 25/38 for a keyword baseline; the agent passes its data-derived
+> checks on the sample and on synthetic data. Main open issue: answer latency (see
+> [Results](#results)).
+
+## How to run it
+
+### Prerequisites
+
+- **Python 3.10+** (3.9 works)
+- **Node.js 18+** and npm, for the front end
+- The sample database **`care_data.db`** somewhere on your machine. It is not in this repo.
+- An **OpenAI API key**, for LLM extraction, embeddings and the agent. Without one you can
+  still build everything offline and run the tests, but not ask the agent questions.
+
+### 1. Install the back end
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Configure
+
+```bash
+cp .env.example .env
+```
+
+Edit `backend/.env`:
+
+| Setting | Required | Example |
+|---|---|---|
+| `SOURCE_DB_PATH` | yes | `/Users/you/data/care_data.db` (full path to the sample database) |
+| `OPENAI_API_KEY` | for the agent | `sk-...` |
+| `EXTRACTION_MODEL`, `AGENT_MODEL` | no | defaults `gpt-5-mini` and `gpt-5`; change if your key can't use them |
+
+On macOS, avoid keeping the database in Downloads, Desktop or Documents: those
+folders are privacy-protected and the terminal may be refused access.
+
+### 3. Build the data
+
+```bash
+python -m app.ingest
+```
+
+This reads the sample database (read-only) and builds `backend/data/agent_index.db`:
+it unpacks the JSON, has the LLM read each visit note once, computes risk scores and
+builds the search index. It takes a few minutes for the sample and costs a few cents.
+Re-running only processes new or changed records.
+
+No API key? Build offline instead (keyword extractor, keyword-only search), in seconds:
+
+```bash
+python -m app.ingest --extractor keyword --no-embeddings
+```
+
+### 4. Start the API
+
+In the same terminal, and leave it running:
+
+```bash
+uvicorn app.api:app --reload --port 8000
+```
+
+Check http://localhost:8000/api/health: it should show `"ok": true` and `"visits": 336`.
+
+### 5. Start the front end
+
+In a second terminal:
+
+```bash
+cd web
+npm install          # first time only
+npm run dev
+```
+
+Open **http://localhost:5173**. The dev server forwards `/api` calls to port 8000.
+
+### 6. Try it
+
+Click a suggested question or type your own:
+
+- Who should I worry about this week?
+- How is Doris Whitfield doing?
+- Has anyone had a fall recently?
+- What's outstanding on safeguarding?
+- How many visits did each carer do last week?
+
+Citation chips like **V205** (a visit) or **F11** (a form) open the source record on
+the right, with the evidence highlighted. "How this was answered" lists the tool calls.
+
+You can also ask from the terminal, without the front end:
+
+```bash
+cd backend && source .venv/bin/activate
+python -m app.agent "Who should I worry about this week?"   # one question
+python -m app.agent                                          # interactive
+```
+
+### Tests and evaluation
+
+From `backend/` with the virtual environment active:
+
+```bash
+pytest -q                                           # 64 tests, ~10 s, offline
+pytest -m slow                                      # + scale test at 5,000 people (~1.5 min)
+python ../eval/run_eval.py extraction               # keyword vs LLM on 38 cases (~40 small LLM calls)
+python ../eval/run_eval.py agent                    # agent questions on your built data (~5 min)
+python ../eval/run_eval.py agent --dataset synthetic --people 60
+```
+
+Reports are written to `eval/results/`. See [Testing and evaluation](#testing-and-evaluation).
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Tests show `skipped` with "sample database not found" | `SOURCE_DB_PATH` in `backend/.env` doesn't point at the file |
+| `Cannot open ... privacy-protected` / `authorization denied` | Move the database out of Downloads/Desktop/Documents, or allow your terminal under System Settings → Privacy & Security → Files and Folders |
+| `as_of not set: run ingestion first` | Run step 3 before starting the API |
+| `model_not_found` | Set `EXTRACTION_MODEL` / `AGENT_MODEL` in `.env` to models your key can use |
+| UI header says "Backend unavailable" | The API (step 4) isn't running on port 8000 |
+| `503: OPENAI_API_KEY is not set` | Add the key to `backend/.env` and restart uvicorn |
+
+Other useful commands: `python -m app.ingest.extract --max-visits 20` (cheap trial of the
+LLM extractor), `python -m app.synthetic --people 1000` (generate a synthetic dataset).
 
 ## The key observation
 
@@ -33,37 +160,6 @@ care_data.db (read-only)                               care manager
    ▼                                                   checked against what tools returned
 agent_index.db  ◄──────────────────────────────────────────┘
 ```
-
-## Setup
-
-```bash
-cd backend
-python3 -m venv .venv && source .venv/bin/activate     # Python 3.10+ recommended (3.9 works)
-pip install -r requirements.txt
-cp .env.example .env    # set SOURCE_DB_PATH and OPENAI_API_KEY
-```
-
-## Run
-
-```bash
-python -m app.ingest                       # build everything (LLM extraction + embeddings)
-python -m app.ingest --extractor keyword   # offline, no API key needed
-python -m app.agent                        # chat in the terminal
-python -m app.agent "Who should I worry about this week?"
-uvicorn app.api:app --reload --port 8000   # HTTP API for the front end
-pytest -q                                  # 61 tests on synthetic data (see Testing and evaluation)
-```
-
-Front end (second terminal, Node 18+):
-
-```bash
-cd web
-npm install
-npm run dev        # http://localhost:5173, proxies /api to http://localhost:8000
-```
-
-Each step can also run alone: `python -m app.ingest.normalise`, `python -m app.ingest.extract
---max-visits 20` (a cheap trial of the LLM extractor), `python -m app.search.index`.
 
 ## Layout
 
@@ -185,9 +281,7 @@ points at the logic under test, not at the extractor. Any size can be generated:
 `python -m app.synthetic --people 2000`.
 
 **Extraction cases** are self-contained visits with what must and must not be found.
-Add one whenever a new phrasing, miss or false positive turns up. The keyword
-baseline passes 25/38 (it can't generalise beyond its patterns); the LLM is scored on
-the same cases.
+Add one whenever a new phrasing, miss or false positive turns up.
 
 **Agent questions** have no hard-coded answers. For example, "Has anyone had a fall?"
 must cite every recorded high-severity fall in the period and must not say "no falls"
@@ -209,9 +303,35 @@ python ../eval/run_eval.py agent                      # agent questions on your 
 python ../eval/run_eval.py agent --dataset synthetic --people 60
 ```
 
-Results go to `eval/results/latest.md`; the exit code is non-zero on any failure, so
-the same commands can gate prompt or model changes in CI. In production, labels would
-also come from use: alerts coordinators acknowledge or dismiss become new cases.
+Results go to `eval/results/` (one file per run, plus `latest.md`); the exit code is
+non-zero on any failure, so the same commands can gate prompt or model changes in CI.
+In production, labels would also come from use: alerts coordinators acknowledge or
+dismiss become new cases.
+
+### Results
+
+Run on 25 Oct 2026. Extraction model `gpt-5-mini`, agent model `gpt-5`.
+
+| What | Result |
+|---|---|
+| Test suite | 64 passed in ~9 s (61 synthetic + 3 sample) |
+| Scale test (`pytest -m slow`) | passed: tool output the same size at 500 and 5,000 people |
+| Extraction, keyword baseline | 25/38 cases; 8/8 negative cases clean |
+| Extraction, LLM | **38/38 cases; 8/8 negative cases clean**, no invented quotes |
+| Agent, sample data | every question recorded passed: "who should I worry about", and "how is X doing" for Doris, Alfred, Margaret and Harold |
+| Agent, synthetic (60 people) | 9/10 passed. The failure was the checker, not the agent: it answered "I can’t find any records…" with a curly apostrophe the check didn't recognise (fixed) |
+
+What the numbers say:
+
+- **The LLM extractor earns its cost.** The keyword baseline misses anything phrased
+  differently from its patterns ("slipped in the bathroom", "tablets still in the
+  blister pack", "quite wheezy", "takes his bank card"). The LLM caught all of these
+  and still left every negated or reassuring note alone ("no injury was noted",
+  "in no distress", "in good spirits").
+- **Answers are correct but slow.** With `gpt-5` the agent took 14–90 s per question
+  (most around 20–35 s). On the 60-person synthetic world, "Who should I worry about"
+  made 22 tool calls, repeating `safeguarding_cases` and `record_issues` for each person
+  instead of once. See next steps.
 
 ## Scaling
 
@@ -230,7 +350,25 @@ are 300 or 3 million visits). Expensive LLM reading happens once per visit on th
 
 ## Known limitations
 
-- Thresholds and the keyword baseline are tuned on a 14-day sample.
-- Synthetic notes are template-based, so they test logic, not language variety; that is what the
-  extraction cases are for.
-- No streaming; answers take a few seconds with several tool calls.
+- **Latency:** 20–90 s per answer with `gpt-5`, too slow for a chat a care manager
+  would use day to day.
+- Thresholds and severity weights are illustrative, set on a 14-day sample.
+- The extraction cases are written by hand (38 so far); they cover patterns, not the
+  full range of how carers write.
+- Synthetic notes are template-based, so they test logic, not language variety; that is
+  what the extraction cases are for.
+- The source has no `updated_at`, so edits to existing visits aren't re-ingested.
+- Single tenant, no authentication.
+
+## Next steps
+
+1. **Cut latency**, measured with the existing eval: try `gpt-5-mini` or a lower
+   reasoning effort for the agent; tell it to call org-wide tools (`safeguarding_cases`,
+   `record_issues`) once rather than per person; cap tool calls per turn; stream the answer.
+2. **Daily digest:** run "who should I worry about" each morning and push new alerts to
+   coordinators, with acknowledge/dismiss buttons. Those decisions become labelled cases
+   and calibrate the thresholds.
+3. **Service-user list** in the UI, sorted by risk, so a new user doesn't start from an
+   empty chat.
+4. **Production path:** Postgres + pgvector (HNSW), queue-based extraction workers,
+   org-scoped access control, audit log of questions, tool calls and answers.

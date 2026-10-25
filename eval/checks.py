@@ -15,8 +15,8 @@ from typing import Callable, Dict, List
 CITE = re.compile(r"\[([VF]\d+)\]")
 REASSURING = ["no concern", "no signal", "no risk", "routine", "settled", "stable", "nothing of concern",
               "no issues", "doing well", "no changes", "no new"]
-NOT_FOUND = ["no record", "not find", "couldn't find", "could not find", "no service user", "not found",
-             "no match", "don't have", "do not have", "no one", "unable to find"]
+NOT_FOUND = ["no record", "not find", "couldn't find", "could not find", "can't find", "cannot find",
+             "no service user", "not found", "no match", "don't have", "do not have", "no one", "unable to find"]
 SAYS_NONE = re.compile(r"\bno (falls?|recorded falls?|reported falls?)\b|nobody (has )?(had a )?fall|"
                        r"there (were|have been) no falls|no one has (had a )?fall", re.I)
 
@@ -82,7 +82,7 @@ def person_summary(answer, cited, tools, conn, as_of, case) -> List[str]:
         wanted = {f"V{r[0]}" for r in signals if (r[1] == "high") == top}
         if not wanted & set(cited):
             failures.append(f"did not cite their most serious recent record (any of {sorted(wanted)[:5]})")
-    elif not any(p in answer.lower() for p in REASSURING):
+    elif not any(p in plain(answer) for p in REASSURING):
         failures.append("no signals on record, but the answer isn't reassuring")
     return failures
 
@@ -97,7 +97,7 @@ def falls(answer, cited, tools, conn, as_of, case) -> List[str]:
         failures.append("said there were no falls, but falls/near-falls are recorded")
     if high and not high & set(cited):
         failures.append(f"cited none of the recorded falls {sorted(high)[:5]}")
-    if not rows and not SAYS_NONE.search(answer) and not any(p in answer.lower() for p in REASSURING):
+    if not rows and not SAYS_NONE.search(answer) and not any(p in plain(answer) for p in REASSURING):
         failures.append("no falls recorded, but the answer doesn't say so")
     return failures
 
@@ -133,11 +133,16 @@ def carer_counts(answer, cited, tools, conn, as_of, case) -> List[str]:
     return failures
 
 
+def plain(text: str) -> str:
+    """Lowercase with typographic quotes straightened (models often write ’)."""
+    return text.lower().replace("\u2019", "'").replace("\u2018", "'")
+
+
 def unknown_person(answer, cited, tools, conn, as_of, case) -> List[str]:
     failures = []
     if cited:
         failures.append(f"cited records for a person who doesn't exist: {cited[:5]}")
-    if not any(p in answer.lower() for p in NOT_FOUND):
+    if not any(p in plain(answer) for p in NOT_FOUND):
         failures.append("didn't say the person wasn't found")
     return failures
 

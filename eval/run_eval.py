@@ -11,7 +11,8 @@ Layers (see eval/README.md):
   agent       questions in eval/cases/agent.yaml, expectations computed from the data
 Invariants (layer 4) are checked on every agent answer and in backend/tests.
 
-Writes eval/results/latest.md and latest.json. Exit code 1 if anything fails.
+Writes eval/results/<run>.md/.json (extraction, agent-current, agent-synthetic, all)
+plus latest.md. Exit code 1 if anything fails.
 """
 
 from __future__ import annotations
@@ -84,10 +85,11 @@ def run_agent(dataset: str, people: int, seed: int, only: Optional[List[str]], l
 
 # --------------------------------------------------------------------------- report
 
-def write_report(report: dict) -> None:
+def write_report(report: dict, name: str) -> None:
     out = _paths.EVAL_DIR / "results"
     out.mkdir(exist_ok=True)
     (out / "latest.json").write_text(json.dumps(report, indent=2, default=str))
+    (out / f"{name}.json").write_text(json.dumps(report, indent=2, default=str))
     lines = ["# Evaluation report", "", f"Run: {report['run_at']}", ""]
     if report.get("extraction"):
         lines += ["## Extraction (pattern cases)", "",
@@ -112,8 +114,9 @@ def write_report(report: dict) -> None:
         for r in run["results"]:
             lines.append(f"| {r['question']} | {'pass' if r['passed'] else 'FAIL'} | {', '.join(r['tools'])} | "
                          f"{r['seconds']} | {'; '.join(r['failures'])} |")
-    (out / "latest.md").write_text("\n".join(lines) + "\n")
-    print(f"\nReport: {out / 'latest.md'}")
+    for filename in ("latest.md", f"{name}.md"):
+        (out / filename).write_text("\n".join(lines) + "\n")
+    print(f"\nReport: {out / (name + '.md')} (also latest.md)")
 
 
 def main() -> int:
@@ -140,7 +143,8 @@ def main() -> int:
         for dataset in ("current", "synthetic"):
             print(f"\nAgent ({dataset})")
             report["agent"].append(run_agent(dataset, 60, 7, None))
-    write_report(report)
+    name = {"extraction": "extraction", "all": "all"}.get(args.command) or f"agent-{args.dataset}"
+    write_report(report, name)
 
     ext_main = report["extraction"][-1]["summary"] if report["extraction"] else None
     failed = (ext_main is not None and ext_main["passed"] < ext_main["cases"]) or any(
