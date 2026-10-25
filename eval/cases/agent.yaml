@@ -1,0 +1,33 @@
+# Questions for the agent. Expectations are computed from whatever data is loaded
+# (see eval/checks.py), so these work on the sample, synthetic data or a snapshot.
+# `{name}` questions are asked about the 2 highest-risk and 2 calmest people.
+
+- id: worry
+  question: Who should I worry about this week?
+  check: alerted_people
+  top: 3
+
+- id: person
+  question: How is {name} doing?
+  check: person_summary
+
+- id: falls
+  question: Has anyone had a fall recently?
+  check: falls
+
+- id: safeguarding
+  question: What's outstanding on safeguarding?
+  check: safeguarding
+  min_cited: 5
+
+- id: no_comment
+  question: How many tasks were marked completed without a comment in the last 14 days?
+  check: completed_without_comment
+
+- id: carer_counts
+  question: How many visits did each carer do in the last 7 days? One line per carer, please.
+  check: carer_counts
+
+- id: unknown
+  question: How is Zebedee Quuxworth doing?
+  check: unknown_person

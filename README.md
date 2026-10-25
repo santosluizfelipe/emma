@@ -3,7 +3,7 @@
 An agent that lets care managers ask questions about home-care visits and clinical
 forms, and surfaces how service users are doing and where the risks are.
 
-> Status: back end (steps 1-5) and front end (step 6) complete. Evaluation set to come.
+> Status: complete. Back end (steps 1-5), front end (step 6) and evaluation (step 7).
 
 ## The key observation
 
@@ -51,7 +51,7 @@ python -m app.ingest --extractor keyword   # offline, no API key needed
 python -m app.agent                        # chat in the terminal
 python -m app.agent "Who should I worry about this week?"
 uvicorn app.api:app --reload --port 8000   # HTTP API for the front end
-pytest -q                                  # 48 tests, offline (fake model + hash embeddings)
+pytest -q                                  # 61 tests on synthetic data (see Testing and evaluation)
 ```
 
 Front end (second terminal, Node 18+):
@@ -98,6 +98,7 @@ backend/app/
       __init__.py             registry: merges every module's SPECS
     sql_guard.py              read-only SQL guardrails
     loop.py                   tool-use loop + citation check
+  synthetic/                  generated datasets with ground truth (tests, evals, scale checks)
   api.py                      FastAPI: /api/chat, /api/records/{ref}, /api/health
 
 web/src/                      React + Vite + TypeScript, plain CSS
@@ -163,6 +164,55 @@ lists the tool calls behind the answer.
   this turn; otherwise one correction round, then the citation is removed.
 - The prompt forbids diagnosis and speculation about who is responsible in safeguarding.
 
+## Testing and evaluation
+
+Nothing in the test suite or the evaluation depends on the sample database. There are
+four layers, and each one grows without anyone hand-labelling a fixed dataset:
+
+| Layer | What it checks | Where | Labels come from |
+|---|---|---|---|
+| 1. Synthetic worlds | the whole pipeline: linking, rules, scores, alerts, tools, search | `backend/app/synthetic`, `backend/tests` | the generator: every risk sentence is planted |
+| 2. Extraction cases | the LLM's judgement on phrasing patterns (negation, hedging, escalation, wording variety) | `eval/cases/extraction/*.yaml` | one small case per pattern, no database |
+| 3. Agent questions | real answers to real questions | `eval/cases/agent.yaml`, `eval/checks.py` | computed from whatever data is loaded |
+| 4. Invariants | properties that hold on any data | `backend/tests/test_invariants.py`, `checks.universal` | none needed |
+
+**Synthetic worlds.** `app.synthetic` writes a database with the same schema as
+`care_data.db` from scenarios: routine care, gradual decline over a week, single serious
+events (with a safeguarding form that names the person but has no ID), negation traps
+and documentation gaps. Because the risks are planted, the ground truth is known. The
+pipeline runs with an *oracle* extractor that returns that truth, so a failing test
+points at the logic under test, not at the extractor. Any size can be generated:
+`python -m app.synthetic --people 2000`.
+
+**Extraction cases** are self-contained visits with what must and must not be found.
+Add one whenever a new phrasing, miss or false positive turns up. The keyword
+baseline passes 25/38 (it can't generalise beyond its patterns); the LLM is scored on
+the same cases.
+
+**Agent questions** have no hard-coded answers. For example, "Has anyone had a fall?"
+must cite every recorded high-severity fall in the period and must not say "no falls"
+if any exist. "How is {name} doing?" is asked about the two highest-risk and two
+calmest people and must cite only that person's records. So the same questions run on
+the sample, a synthetic world of any size, or a production snapshot.
+
+**Invariants** include: every scored quote appears verbatim in its source; every ref a
+tool returns exists; unknown people aren't invented; tools respect their row caps; and
+tool output stays the same size when the population grows from 200 to 1,000 people
+(5,000 with `pytest -m slow`).
+
+```bash
+cd backend
+pytest -q                                             # 61 tests, ~7 s, no API key, no sample DB needed
+pytest -m slow                                        # + scale test at 5,000 people
+python ../eval/run_eval.py extraction                 # keyword baseline + LLM on the pattern cases
+python ../eval/run_eval.py agent                      # agent questions on your built data
+python ../eval/run_eval.py agent --dataset synthetic --people 60
+```
+
+Results go to `eval/results/latest.md`; the exit code is non-zero on any failure, so
+the same commands can gate prompt or model changes in CI. In production, labels would
+also come from use: alerts coordinators acknowledge or dismiss become new cases.
+
 ## Scaling
 
 Cost per question doesn't grow with the data: tools read pre-computed, indexed tables and
@@ -181,5 +231,6 @@ are 300 or 3 million visits). Expensive LLM reading happens once per visit on th
 ## Known limitations
 
 - Thresholds and the keyword baseline are tuned on a 14-day sample.
-- The LLM extractor hasn't been measured against a labelled set yet (step 7).
+- Synthetic notes are template-based, so they test logic, not language variety; that is what the
+  extraction cases are for.
 - No streaming; answers take a few seconds with several tool calls.

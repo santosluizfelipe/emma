@@ -1,0 +1,6 @@
+- id: mood-withdrawn
+  note: "He was very withdrawn today and gave minimal engagement throughout the visit."
+  expect: [{category: mood, severity: medium}]
+- id: mood-tearful-lonely
+  note: "Tearful when I arrived and said she feels lonely since her sister moved away."
+  expect: [{category: mood, severity: [low, medium]}]

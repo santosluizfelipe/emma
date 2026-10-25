@@ -1,0 +1,9 @@
+- id: sg-money-missing
+  note: "She expressed worry that money was going missing from the property; informed office."
+  expect: [{category: safeguarding, severity: high, escalated: true}]
+- id: sg-scared-of-visitor
+  note: "He said he does not like it when his nephew visits because he shouts at him and takes his bank card."
+  expect: [{category: safeguarding, severity: high}]
+- id: sg-house-cold-no-food
+  note: "Heating was off, the house was very cold and there was no food in the cupboards."
+  expect: [{category: [safeguarding, intake, other], severity: [medium, high]}]

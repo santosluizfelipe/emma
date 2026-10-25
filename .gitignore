@@ -21,3 +21,8 @@ web/dist/
 # OS / editor
 .DS_Store
 .vscode/
+
+# Evaluation outputs
+eval/results/
+eval/.work/
+__pycache__/

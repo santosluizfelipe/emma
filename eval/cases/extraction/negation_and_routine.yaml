@@ -1,0 +1,25 @@
+# None of these should produce a signal.
+- id: routine-template
+  note: "I attended for the planned routine visit. Personal care was completed as agreed, medication was prompted and taken without issue, and breakfast was served. No concerns were noted."
+  expect: []
+- id: negation-no-injury-alone
+  note: "Mobilised with the frame to the kitchen and back; no injury was noted."
+  expect: []
+- id: negation-no-distress
+  note: "Welfare check completed and she was comfortable, settled and in no distress throughout the visit."
+  expect: []
+- id: negation-no-bruising
+  note: "Skin checked during personal care; there were no signs of bruising or redness."
+  expect: []
+- id: negation-not-confused
+  note: "He was not confused today and chatted happily about the football."
+  expect: []
+- id: negation-ate-well
+  note: "Assisted with her evening meal and encouraged fluids; she ate and drank well."
+  expect: []
+- id: negation-no-falls
+  note: "No falls since the last visit and she is walking confidently with her stick."
+  expect: []
+- id: reassuring-good-spirits
+  note: "A welfare check was completed and he appeared settled, comfortable and in good spirits throughout."
+  expect: []

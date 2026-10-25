@@ -1,0 +1,12 @@
+- id: cognition-unsure-date
+  note: "He was slightly unsure about the day/date at first, so I gently reoriented him, and he responded well."
+  expect: [{category: cognition, severity: low}]
+- id: cognition-confused-surroundings
+  note: "On arrival he appeared a little confused about his surroundings and needed some reassurance."
+  expect: [{category: cognition, severity: medium}]
+- id: cognition-did-not-recognise
+  note: "She did not recognise me today although I visit most mornings, and kept asking where her husband was."
+  expect: [{category: cognition, severity: [medium, high]}]
+- id: cognition-new-wandering
+  note: "Neighbour reported he was found walking outside in his slippers at 6am, which is new."
+  expect: [{category: [cognition, safeguarding, falls_mobility], severity: [medium, high]}]

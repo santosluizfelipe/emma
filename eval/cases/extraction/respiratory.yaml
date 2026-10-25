@@ -1,0 +1,16 @@
+- id: resp-breathless-exertion
+  note: "She was mildly breathless on exertion today, so I encouraged her to pace herself during personal care."
+  known_risks: "breathlessness, chest infection"
+  expect: [{category: respiratory, severity: low}]
+- id: resp-inhaler-more-often
+  note: "I noted she has been using her inhaler more often than usual."
+  expect: [{category: respiratory, severity: [low, medium]}]
+- id: resp-breathless-at-rest
+  note: "She was a little more breathless at rest this morning, so I encouraged her to take regular rests."
+  expect: [{category: respiratory, severity: high}]
+- id: resp-discoloured-sputum
+  note: "She had a cough that seemed worse than usual and the sputum was discoloured, so this was flagged to the office."
+  expect: [{category: respiratory, severity: high, escalated: true}]
+- id: resp-wheezy
+  note: "Quite wheezy and struggling to finish sentences while we talked."
+  expect: [{category: respiratory, severity: [medium, high]}]

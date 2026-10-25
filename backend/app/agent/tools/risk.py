@@ -15,6 +15,7 @@ def risk_overview(ctx: ToolContext, days: int = 7, limit: int = 10) -> dict:
     days = max(1, min(days, 31))
     limit = max(1, min(limit, 25))
     since = ctx.days_ago(days)
+    evidence_from = ctx.days_ago(days + config.ROLLING_DAYS - 1)
     rows = ctx.conn.execute(
         """
         WITH window AS (
@@ -46,7 +47,8 @@ def risk_overview(ctx: ToolContext, days: int = 7, limit: int = 10) -> dict:
             ORDER BY severity_score DESC, day DESC
             LIMIT 6
             """,
-            (r["service_user_id"], since, ctx.today),
+            # rolling scores in the period include the 6 days before it, so does the evidence
+            (r["service_user_id"], evidence_from, ctx.today),
         ).fetchall()
         people.append({
             "service_user_id": r["service_user_id"],

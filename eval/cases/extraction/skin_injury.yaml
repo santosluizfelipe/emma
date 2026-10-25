@@ -1,0 +1,9 @@
+- id: skin-unexplained-bruise
+  note: "Bruising noted to left forearm; reported to office."
+  expect: [{category: [skin_injury, safeguarding], severity: high, escalated: true}]
+- id: skin-red-sacrum
+  note: "Red area noticed on his sacrum that did not fade when pressed; cream applied and district nurse informed."
+  expect: [{category: skin_injury, severity: [medium, high], escalated: true}]
+- id: skin-tear
+  note: "Small skin tear on the back of her hand from the walking frame, cleaned and dressed."
+  expect: [{category: skin_injury}]

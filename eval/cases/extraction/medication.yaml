@@ -1,0 +1,11 @@
+- id: med-family-not-given-contradiction
+  note: "I completed the morning visit and supported with personal care and breakfast."
+  tasks:
+    - {name: Medication, status: Completed, comment: "Family reported not to have given morning medication again; escalated to office."}
+  expect: [{category: medication, severity: high, escalated: true}]
+- id: med-refused-tablets
+  note: "She refused her evening tablets twice despite encouragement; recorded on the MAR chart."
+  expect: [{category: medication, severity: [medium, high]}]
+- id: med-blister-pack-full
+  note: "Noticed yesterday's tablets were still in the blister pack."
+  expect: [{category: medication, severity: [medium, high]}]

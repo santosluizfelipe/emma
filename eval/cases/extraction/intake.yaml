@@ -1,0 +1,12 @@
+- id: intake-about-half
+  note: "Breakfast was prepared and offered, and he had a reduced appetite, eating about half of the meal."
+  expect: [{category: intake, severity: low}]
+- id: intake-declined-fluids
+  note: "He declined fluids at first but after encouragement he took a little."
+  expect: [{category: intake, severity: medium}]
+- id: intake-untouched-meal
+  note: "Yesterday's lunch was still untouched in the fridge and she said she wasn't hungry."
+  expect: [{category: intake, severity: [low, medium]}]
+- id: intake-only-sips
+  note: "Only managed a few sips of tea all visit; urine looked dark."
+  expect: [{category: intake, severity: [medium, high]}]

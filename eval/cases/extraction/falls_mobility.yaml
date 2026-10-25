@@ -1,0 +1,20 @@
+- id: falls-near-fall-escalated
+  note: "While assisting him to stand from the chair, he had a slight near-fall but was steadied straight away; no injury was noted and the office was informed."
+  known_risks: "falls, unsteadiness"
+  expect: [{category: falls_mobility, severity: high, escalated: true}]
+  forbid: [skin_injury]
+- id: falls-found-on-floor
+  note: "On arrival she was found on the floor in the hallway, conscious and talking. Supported to get up once checked; GP called."
+  expect: [{category: falls_mobility, severity: high, escalated: true}]
+- id: falls-had-a-tumble
+  note: "She mentioned she had a tumble in the garden yesterday afternoon but said she was fine."
+  expect: [{category: falls_mobility, severity: high}]
+- id: falls-slipped-in-bathroom
+  note: "Pat told me he slipped in the bathroom overnight and ended up sitting on the floor until morning."
+  expect: [{category: falls_mobility, severity: high}]
+- id: mobility-more-unsteady
+  note: "He was a little more unsteady on his feet today and used his frame throughout."
+  expect: [{category: falls_mobility, severity: medium}]
+- id: mobility-legs-gave-way
+  note: "Her legs felt weak this morning and she needed two attempts to stand from the bed."
+  expect: [{category: falls_mobility, severity: [medium, high]}]
