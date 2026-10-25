@@ -1,0 +1,191 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c2430;
+  --muted: #667085;
+  --border: #e3e6eb;
+  --accent: #2563eb;
+  --accent-soft: #e8efff;
+  --form: #7c3aed;
+  --form-soft: #f1eafe;
+  --user: #1f3b70;
+  --danger: #b42318;
+  --danger-soft: #fef0ef;
+  --warn: #b54708;
+  --low: #a16207;
+  --low-soft: #fef6dc;
+  --medium: #c2410c;
+  --medium-soft: #ffeedd;
+  --high: #b42318;
+  --high-soft: #fde7e5;
+  --mark: #fff1a8;
+  --radius: 12px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1318;
+    --surface: #171c23;
+    --text: #e6e9ee;
+    --muted: #98a2b3;
+    --border: #2a313b;
+    --accent: #6d9bff;
+    --accent-soft: #1b2a47;
+    --form: #b794f6;
+    --form-soft: #2a2140;
+    --user: #2b4c8c;
+    --danger: #ff8a80;
+    --danger-soft: #3a1d1b;
+    --warn: #f5b26b;
+    --low-soft: #3a3115;
+    --medium-soft: #3d2615;
+    --high-soft: #3d1c1a;
+    --low: #f0c95c;
+    --medium: #fb9a5b;
+    --high: #ff8a80;
+    --mark: #5c4d12;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.6; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; }
+
+/* ---------------------------------------------------------------- layout */
+.layout { display: grid; grid-template-columns: 1fr; height: 100vh; }
+.layout.with-panel { grid-template-columns: 1fr minmax(320px, 420px); }
+.main { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
+
+.header {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.header h1 { margin: 0; font-size: 1.15rem; }
+.subtitle { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.status { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: #16a34a; }
+.dot.bad { background: var(--danger); }
+
+.conversation {
+  flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  max-width: 900px; width: 100%; margin: 0 auto;
+}
+
+/* ---------------------------------------------------------------- empty state */
+.empty { margin: auto 0; text-align: center; padding: 24px 0; }
+.empty h2 { margin: 0 0 8px; font-size: 1.4rem; }
+.empty p { color: var(--muted); max-width: 560px; margin: 0 auto 20px; }
+.suggestions { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.suggestion {
+  text-align: left; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+}
+.suggestion:hover:not(:disabled) { border-color: var(--accent); }
+
+/* ---------------------------------------------------------------- messages */
+.bubble { border-radius: var(--radius); padding: 12px 16px; max-width: 100%; }
+.bubble.user {
+  align-self: flex-end; background: var(--user); color: #fff; max-width: 75%; white-space: pre-wrap;
+}
+.bubble.assistant { align-self: stretch; background: var(--surface); border: 1px solid var(--border); }
+.bubble.error { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); }
+
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p, .markdown li { margin: 6px 0; }
+.markdown ul, .markdown ol { padding-left: 22px; }
+.markdown table { border-collapse: collapse; margin: 8px 0; font-size: 0.9rem; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+
+.chip {
+  display: inline-block; border: none; border-radius: 6px; padding: 0 6px; margin: 0 1px 0 3px;
+  font-size: 0.78rem; font-weight: 600; line-height: 1.6; vertical-align: 1px;
+}
+.chip.visit { background: var(--accent-soft); color: var(--accent); }
+.chip.form { background: var(--form-soft); color: var(--form); }
+.chip:hover, .chip.active { outline: 2px solid currentColor; }
+
+.notice { font-size: 0.85rem; color: var(--warn); margin: 10px 0 0; }
+.answer-footer {
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; font-size: 0.85rem;
+}
+.trace summary { color: var(--muted); cursor: pointer; }
+.trace ol { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+.trace code { word-break: break-word; }
+
+.thinking { color: var(--muted); display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border);
+  border-top-color: var(--accent); animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- composer */
+.composer {
+  display: flex; gap: 10px; border-top: 1px solid var(--border); background: var(--surface);
+  /* full-width bar, content aligned with the 900px conversation column */
+  padding: 14px max(24px, calc((100% - 900px) / 2 + 24px)) 18px;
+}
+.composer textarea {
+  flex: 1; resize: none; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+  font: inherit; background: var(--bg); color: var(--text);
+}
+.composer textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.composer button {
+  padding: 0 20px; border: none; border-radius: var(--radius); background: var(--accent); color: #fff; font-weight: 600;
+}
+.ghost {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  border-radius: 8px; padding: 6px 10px; font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- record panel */
+.panel {
+  border-left: 1px solid var(--border); background: var(--surface); display: flex;
+  flex-direction: column; height: 100vh; min-width: 0;
+}
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+.panel-header h3 { margin: 0; font-size: 1rem; }
+.panel-title { color: var(--muted); font-weight: 400; }
+.panel-body { overflow-y: auto; padding: 16px 18px 32px; font-size: 0.92rem; }
+.panel-body h4 { margin: 18px 0 6px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.meta { margin: 0; }
+.note { margin: 0; }
+mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 3px; }
+.tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.signals { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.signals li { display: flex; gap: 8px; align-items: center; }
+.severity { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
+.severity.low { background: var(--low-soft); color: var(--low); }
+.severity.medium { background: var(--medium-soft); color: var(--medium); }
+.severity.high { background: var(--high-soft); color: var(--high); }
+.category { text-transform: capitalize; }
+.escalated { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+dl { margin: 0; display: grid; gap: 10px; }
+dt { font-weight: 600; }
+dd { margin: 2px 0 0; }
+
+.muted { color: var(--muted); }
+.warn { color: var(--warn); }
+.error-text { color: var(--danger); }
+
+/* ---------------------------------------------------------------- small screens */
+@media (max-width: 860px) {
+  .layout.with-panel { grid-template-columns: 1fr; }
+  .panel { position: fixed; inset: 0; z-index: 10; height: 100vh; }
+  .header { padding: 12px 16px; flex-direction: column; align-items: flex-start; }
+  .conversation, .composer { padding-left: 16px; padding-right: 16px; }
+  .bubble.user { max-width: 90%; }
+}

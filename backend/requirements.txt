@@ -1,0 +1,12 @@
+# Step 1 (data preparation)
+python-dotenv>=1.0
+pytest>=8.0
+
+# Later steps
+openai>=1.40
+pydantic>=2.6
+sqlite-vec>=0.1.6
+sqlglot>=25.0
+fastapi>=0.110
+uvicorn>=0.29
+pyyaml>=6.0

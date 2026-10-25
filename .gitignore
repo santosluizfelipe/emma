@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Databases: the source DB lives outside the repo; derived data is rebuildable
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+backend/data/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# OS / editor
+.DS_Store
+.vscode/
